@@ -1,0 +1,24 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "sk",
+                "Email": ""
+            }
+        ],
+        "Category": "Application Launchers",
+        "Description": "A modern, simple application menu: favorites, all applications, search, grid or list view and power actions, in a clean look.",
+        "EnabledByDefault": true,
+        "Icon": "start-here-kde-symbolic",
+        "Id": "org.sk.modernmenu",
+        "License": "GPL-2.0-or-later",
+        "Name": "Modern Menu",
+        "Version": "1.0.0",
+        "Website": ""
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-Provides": [
+        "org.kde.plasma.launchermenu"
+    ]
+}

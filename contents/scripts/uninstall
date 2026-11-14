@@ -1,0 +1,48 @@
+#!/bin/bash
+# modernmenu-uninstall <desktop-id>
+# Uninstall the application that ships the given .desktop file id,
+# whether it was installed as a Flatpak, an rpm/dnf package, or a
+# manually placed .desktop file we cannot handle.
+set -u
+
+id="${1:-}"
+if ! [[ "$id" =~ ^[A-Za-z0-9._-]+\.desktop$ ]]; then
+    echo "invalid desktop id: '$id'" >&2
+    exit 2
+fi
+base="${id%.desktop}"
+
+user_desktop="$HOME/.local/share/flatpak/exports/share/applications/$id"
+sys_desktop="/var/lib/flatpak/exports/share/applications/$id"
+
+# 1) user flatpak
+if [ -f "$user_desktop" ]; then
+    flatpak uninstall --user -y "$base"
+    exit $?
+fi
+
+# 2) system flatpak
+if [ -f "$sys_desktop" ]; then
+    if command -v pkexec >/dev/null 2>&1; then
+        pkexec flatpak uninstall --system -y "$base" && exit $?
+        echo "pkexec failed; trying without elevation" >&2
+    fi
+    flatpak uninstall --system -y "$base"
+    exit $?
+fi
+
+# 3) a regular file in an applications dir
+for d in /usr/share/applications /usr/local/share/applications "$HOME/.local/share/applications"; do
+    f="$d/$id"
+    [ -f "$f" ] || continue
+    # rpm-owned package?
+    pkg="$(rpm -qf --queryformat='%{NAME}' "$f" 2>/dev/null)"
+    if [ -n "$pkg" ]; then
+        pkexec dnf remove -y "$pkg"
+        exit $?
+    fi
+    echo "found $f but no package owns it" >&2
+done
+
+echo "don't know how to uninstall '$id'" >&2
+exit 42
