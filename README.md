@@ -9,13 +9,16 @@ A simple, fast and good-looking application launcher for **KDE Plasma 6**.
 - **All Applications** — flat, alphabetical grid of every app installed
 - **Favorites** — pin apps with a star; they stay on one page
 - **Places** — Home, Documents, Downloads and other KIO places
-- **System** — session actions (lock, suspend, restart, shut down)
+- **System** — lock, suspend, restart and shut down (with per-button toggles)
 - **Search** — KRunner-powered; type and press Enter to launch the best match
+- **Quick math** — type `(3200*4)+35` and the result appears as a chip while you search
+- **Web results (DuckDuckGo, optional)** — instant answer + Wikipedia-style summary inside the menu; toggle in Settings (off by default)
 - **Grid / List toggle** — switch between card grid and list rows (persisted)
 - **Collapsible sidebar** — slim the icon rail down to icons-only mode (persisted)
-- **Configurable grid** — columns (1–8), card height, popup size
+- **Configurable grid** — columns (1–8), card height, popup width/height
 - **User profile on/off** — hide the avatar/name in the bottom bar
-- **Power buttons on/off** — lock, suspend, restart, shut down
+- **Power buttons** — master switch plus a per-button toggle for Lock / Suspend / Restart / Shut Down
+- **Uninstall apps** — right-click an app → Uninstall… (Flatpak via `flatpak uninstall`, rpm via `pkexec dnf remove`; script is bundled in the package)
 
 Right-click any app → **Add to Favorites**, **Run**, **Uninstall…** or **Edit Applications…**.
 On hover, a star appears on each app to toggle its favorite state.
@@ -71,6 +74,21 @@ Right-click an app → **Uninstall…** (desktop entries only).
 - **rpm/dnf** apps are removed with `pkexec dnf remove -y <package>`
 
 If something cannot be determined or fails, the widget shows the actual error instead of silently doing nothing.
+
+## Screenshot
+
+![Modern Menu](screenshot.png)
+
+## Right-click menu
+
+- **Add to Favorites / Remove from Favorites**
+- **Run**
+- **Uninstall…** (desktop entries only)
+- **Edit Applications…**
+
+## Web search (optional)
+
+Web answers come from the **DuckDuckGo Instant Answer API** (keyless, results fetched from within the menu). Enable it under *Configure Modern Menu… → General → Show web results when searching*. Google has no keyless inline-result API, so results are shown the same way instead of a Google HTML scrape.
 
 ## Notes
 
