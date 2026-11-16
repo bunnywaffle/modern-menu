@@ -773,6 +773,198 @@ PlasmoidItem {
         }
     }
 
+    Component {
+        id: searchAugmentComponent
+
+                // ---- Search augment: math result + web answer panel ----
+        ColumnLayout {
+            id: searchAugment
+            width: ListView.view ? ListView.view.width : Kirigami.Units.gridUnit * 40
+            spacing: Kirigami.Units.smallSpacing / 2
+
+                    // ── math result ──
+                    RowLayout {
+                        visible: modernMenu.mathResult !== null
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 1.8
+                        spacing: Kirigami.Units.smallSpacing
+
+                        PC3.Label {
+                            text: i18nc("@info:status", "HINT")
+                            font.pixelSize: Kirigami.Units.gridUnit * 0.6
+                            font.letterSpacing: 1.5
+                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.38)
+                        }
+
+                        Rectangle {
+                            id: mathChip
+
+                            Layout.preferredWidth: mathLabel.implicitWidth + Kirigami.Units.iconSizes.smallMedium + Kirigami.Units.largeSpacing * 1.6
+                            Layout.preferredHeight: Kirigami.Units.gridUnit * 1.6
+                            radius: height / 2
+                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
+                            border.width: 1
+                            border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.45)
+
+                            Kirigami.Icon {
+                                id: mathIcon
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: Kirigami.Units.largeSpacing * 0.8
+                                source: "accessories-calculator-symbolic"
+                                width: Kirigami.Units.iconSizes.small
+                                height: Kirigami.Units.iconSizes.small
+                                color: Kirigami.Theme.highlightColor
+                            }
+                            PC3.Label {
+                                id: mathLabel
+                                anchors.left: mathIcon.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: Kirigami.Units.smallSpacing
+                                text: "= " + String(modernMenu.mathResult)
+                                font.pixelSize: Kirigami.Units.gridUnit * 0.72
+                                font.bold: true
+                                font.family: "monospace"
+                                color: Kirigami.Theme.highlightColor
+                            }
+                        }
+                        Item {
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    // ── web answer panel (DuckDuckGo Instant Answer) ──
+                    Rectangle {
+                        id: webPanel
+
+                        visible: modernMenu.webHasContent
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: webColumn.implicitHeight + Kirigami.Units.largeSpacing * 1.4
+                        radius: Kirigami.Units.smallSpacing * 1.6
+                        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.95)
+                        border.width: 1
+                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.18)
+
+                        ColumnLayout {
+                            id: webColumn
+                            anchors.fill: parent
+                            anchors.margins: Kirigami.Units.largeSpacing * 0.7
+                            anchors.topMargin: Kirigami.Units.smallSpacing
+                            anchors.bottomMargin: Kirigami.Units.smallSpacing
+                            spacing: 1
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: modernMenu.webHeadline.length > 0
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Kirigami.Icon {
+                                    source: "internet-web-browser-symbolic"
+                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                    color: Kirigami.Theme.highlightColor
+                                }
+                                PC3.Label {
+                                    Layout.fillWidth: true
+                                    text: modernMenu.webHeadline
+                                    font.bold: true
+                                    font.pixelSize: Kirigami.Units.gridUnit * 0.74
+                                    elide: Text.ElideRight
+                                    maximumLineCount: 1
+                                }
+                                PC3.Label {
+                                    text: i18nc("@info:status web search source tag", "WEB")
+                                    font.pixelSize: Kirigami.Units.gridUnit * 0.56
+                                    font.letterSpacing: 1.5
+                                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
+                                }
+                            }
+
+                            PC3.Label {
+                                visible: modernMenu.webAnswerText.length > 0
+                                Layout.fillWidth: true
+                                text: modernMenu.webAnswerText
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
+                                font.pixelSize: Kirigami.Units.gridUnit * 0.66
+                                opacity: 0.88
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: modernMenu.webAnswerSource.length > 0 || modernMenu.webAnswerUrl.length > 0 || modernMenu.webRelated.length > 0
+                                spacing: Kirigami.Units.smallSpacing
+
+                                PC3.Label {
+                                    visible: modernMenu.webAnswerSource.length > 0
+                                    text: i18nc("@info:status", "via %1", modernMenu.webAnswerSource)
+                                    font.pixelSize: Kirigami.Units.gridUnit * 0.58
+                                    opacity: 0.55
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        enabled: modernMenu.webAnswerUrl.length > 0
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            modernMenu.expanded = false
+                                            sessionSource.connectSource("xdg-open '" + modernMenu.shellEscape(modernMenu.webAnswerUrl) + "'")
+                                        }
+                                    }
+                                }
+
+                                Repeater {
+                                    model: modernMenu.webRelated
+
+                                    delegate: Rectangle {
+                                        required property var modelData
+
+                                        Layout.preferredWidth: relatedLabel.implicitWidth + Kirigami.Units.largeSpacing * 2.2
+                                        Layout.preferredHeight: Kirigami.Units.gridUnit * 1.4
+                                        radius: height / 2
+                                        color: relatedHover.containsMouse
+                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.22)
+                                            : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                                        border.width: 1
+                                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+
+                                        PC3.Label {
+                                            id: relatedLabel
+                                            anchors.centerIn: parent
+                                            text: modelData.title
+                                            font.pixelSize: Kirigami.Units.gridUnit * 0.62
+                                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.85)
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 1
+                                        }
+
+                                        MouseArea {
+                                            id: relatedHover
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+
+                                            onClicked: {
+                                                const url = modelData.url
+                                                if (url) {
+                                                    modernMenu.expanded = false
+                                                    sessionSource.connectSource("xdg-open '" + modernMenu.shellEscape(url) + "'")
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+                            }
+                        }
+                    }
+                }
+
+    }
+
     // ---------- Views ----------
 
     Component {
@@ -816,6 +1008,8 @@ PlasmoidItem {
         ListView {
             id: searchList
             model: modernMenu.runnerModel.count > 0 ? modernMenu.runnerModel.modelForRow(0) : null
+            header: (modernMenu.mathResult !== null || modernMenu.webHasContent) ? searchAugmentComponent : null
+            headerPositioning: ListView.OverlayHeader
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             delegate: listDelegateComponent
@@ -1249,204 +1443,6 @@ PlasmoidItem {
                             restoreMode: Binding.RestoreBinding
                         }
                     }
-
-                // ---- Search augment: math result + web answer panel ----
-                ColumnLayout {
-                    id: searchAugment
-
-                    visible: modernMenu.searching
-                        && (modernMenu.mathResult !== null || modernMenu.webHasContent)
-                    anchors {
-                        top: parent.top
-                        left: parent.left
-                        right: parent.right
-                        topMargin: Kirigami.Units.smallSpacing
-                        leftMargin: Kirigami.Units.smallSpacing
-                        rightMargin: Kirigami.Units.smallSpacing
-                    }
-                    spacing: Kirigami.Units.smallSpacing / 2
-                    z: 5
-
-                    // ── math result ──
-                    RowLayout {
-                        visible: modernMenu.mathResult !== null
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: Kirigami.Units.gridUnit * 1.8
-                        spacing: Kirigami.Units.smallSpacing
-
-                        PC3.Label {
-                            text: i18nc("@info:status", "HINT")
-                            font.pixelSize: Kirigami.Units.gridUnit * 0.6
-                            font.letterSpacing: 1.5
-                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.38)
-                        }
-
-                        Rectangle {
-                            id: mathChip
-
-                            Layout.preferredWidth: mathLabel.implicitWidth + Kirigami.Units.iconSizes.smallMedium + Kirigami.Units.largeSpacing * 1.6
-                            Layout.preferredHeight: Kirigami.Units.gridUnit * 1.6
-                            radius: height / 2
-                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
-                            border.width: 1
-                            border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.45)
-
-                            Kirigami.Icon {
-                                id: mathIcon
-                                anchors.left: parent.left
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.leftMargin: Kirigami.Units.largeSpacing * 0.8
-                                source: "accessories-calculator-symbolic"
-                                width: Kirigami.Units.iconSizes.small
-                                height: Kirigami.Units.iconSizes.small
-                                color: Kirigami.Theme.highlightColor
-                            }
-                            PC3.Label {
-                                id: mathLabel
-                                anchors.left: mathIcon.right
-                                anchors.verticalCenter: parent.verticalCenter
-                                anchors.leftMargin: Kirigami.Units.smallSpacing
-                                text: "= " + String(modernMenu.mathResult)
-                                font.pixelSize: Kirigami.Units.gridUnit * 0.72
-                                font.bold: true
-                                font.family: "monospace"
-                                color: Kirigami.Theme.highlightColor
-                            }
-                        }
-                        Item {
-                            Layout.fillWidth: true
-                        }
-                    }
-
-                    // ── web answer panel (DuckDuckGo Instant Answer) ──
-                    Rectangle {
-                        id: webPanel
-
-                        visible: modernMenu.webHasContent
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: webColumn.implicitHeight + Kirigami.Units.largeSpacing * 1.4
-                        radius: Kirigami.Units.smallSpacing * 1.6
-                        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.95)
-                        border.width: 1
-                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.18)
-
-                        ColumnLayout {
-                            id: webColumn
-                            anchors.fill: parent
-                            anchors.margins: Kirigami.Units.largeSpacing * 0.7
-                            anchors.topMargin: Kirigami.Units.smallSpacing
-                            anchors.bottomMargin: Kirigami.Units.smallSpacing
-                            spacing: 1
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                visible: modernMenu.webHeadline.length > 0
-                                spacing: Kirigami.Units.smallSpacing
-
-                                Kirigami.Icon {
-                                    source: "internet-web-browser-symbolic"
-                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
-                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
-                                    color: Kirigami.Theme.highlightColor
-                                }
-                                PC3.Label {
-                                    Layout.fillWidth: true
-                                    text: modernMenu.webHeadline
-                                    font.bold: true
-                                    font.pixelSize: Kirigami.Units.gridUnit * 0.74
-                                    elide: Text.ElideRight
-                                    maximumLineCount: 1
-                                }
-                                PC3.Label {
-                                    text: i18nc("@info:status web search source tag", "WEB")
-                                    font.pixelSize: Kirigami.Units.gridUnit * 0.56
-                                    font.letterSpacing: 1.5
-                                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
-                                }
-                            }
-
-                            PC3.Label {
-                                visible: modernMenu.webAnswerText.length > 0
-                                Layout.fillWidth: true
-                                text: modernMenu.webAnswerText
-                                wrapMode: Text.Wrap
-                                maximumLineCount: 3
-                                elide: Text.ElideRight
-                                font.pixelSize: Kirigami.Units.gridUnit * 0.66
-                                opacity: 0.88
-                            }
-
-                            RowLayout {
-                                Layout.fillWidth: true
-                                visible: modernMenu.webAnswerSource.length > 0 || modernMenu.webAnswerUrl.length > 0 || modernMenu.webRelated.length > 0
-                                spacing: Kirigami.Units.smallSpacing
-
-                                PC3.Label {
-                                    visible: modernMenu.webAnswerSource.length > 0
-                                    text: i18nc("@info:status", "via %1", modernMenu.webAnswerSource)
-                                    font.pixelSize: Kirigami.Units.gridUnit * 0.58
-                                    opacity: 0.55
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        enabled: modernMenu.webAnswerUrl.length > 0
-                                        hoverEnabled: true
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: {
-                                            modernMenu.expanded = false
-                                            sessionSource.connectSource("xdg-open '" + modernMenu.shellEscape(modernMenu.webAnswerUrl) + "'")
-                                        }
-                                    }
-                                }
-
-                                Repeater {
-                                    model: modernMenu.webRelated
-
-                                    delegate: Rectangle {
-                                        required property var modelData
-
-                                        Layout.preferredWidth: relatedLabel.implicitWidth + Kirigami.Units.largeSpacing * 2.2
-                                        Layout.preferredHeight: Kirigami.Units.gridUnit * 1.4
-                                        radius: height / 2
-                                        color: relatedHover.containsMouse
-                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.22)
-                                            : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
-                                        border.width: 1
-                                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
-
-                                        PC3.Label {
-                                            id: relatedLabel
-                                            anchors.centerIn: parent
-                                            text: modelData.title
-                                            font.pixelSize: Kirigami.Units.gridUnit * 0.62
-                                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.85)
-                                            elide: Text.ElideRight
-                                            maximumLineCount: 1
-                                        }
-
-                                        MouseArea {
-                                            id: relatedHover
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            cursorShape: Qt.PointingHandCursor
-
-                                            onClicked: {
-                                                const url = modelData.url
-                                                if (url) {
-                                                    modernMenu.expanded = false
-                                                    sessionSource.connectSource("xdg-open '" + modernMenu.shellEscape(url) + "'")
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-
-                                Item {
-                                    Layout.fillWidth: true
-                                }
-                            }
-                        }
-                    }
-                }
 
                 // ---- Section header + count ----
                 RowLayout {
