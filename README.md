@@ -10,7 +10,7 @@ A simple, fast and good-looking application launcher for **KDE Plasma 6**.
 - **Favorites** — pin apps with a star; they stay on one page
 - **Places** — Home, Documents, Downloads and other KIO places
 - **System** — lock, suspend, restart and shut down (with per-button toggles)
-- **Search** — KRunner-powered; type and press Enter to launch the best match
+- **Search** — fuzzy (subsequence) app search like fzf, combined with KRunner — `fox` finds Firefox, `calcu` finds Calculator; Enter launches the best match
 - **Quick math** — type `(3200*4)+35` and the result appears as a chip while you search
 - **Web results (DuckDuckGo, optional)** — instant answer + Wikipedia-style summary inside the menu; toggle in Settings (off by default)
 - **Grid / List toggle** — switch between card grid and list rows (persisted)

@@ -20,6 +20,7 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 
 import org.kde.kirigami as Kirigami
+import org.kde.kitemmodels as KItemModels
 import org.kde.plasma.components as PC3
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.extras as PlasmaExtras
@@ -100,6 +101,159 @@ PlasmoidItem {
 
     Kicker.ProcessRunner {
         id: processRunner
+    }
+
+    // ========== Fuzzy search engine ==========
+
+    readonly property int appsDisplayRole: Qt.DisplayRole
+    readonly property int appsDecorationRole: KItemModels.KRoleNames.role("decoration")
+    readonly property int appsDescriptionRole: KItemModels.KRoleNames.role("description")
+    readonly property int appsUrlRole: KItemModels.KRoleNames.role("url")
+    readonly property int appsFavoriteIdRole: KItemModels.KRoleNames.role("favoriteId")
+    readonly property int groupRole: KItemModels.KRoleNames.role("group")
+
+    // subsequence fuzzy match, editor-style scoring (higher is better)
+    function fuzzyScore(text: string, query: string): int {
+        if (!text || !query) return -1
+        const t = text.toLowerCase()
+        const q = query.toLowerCase()
+        let ti = 0, qi = 0
+        let score = 0
+        let consecutive = 0
+        let lastIdx = -1
+        const tLen = t.length
+        const qLen = q.length
+        while (ti < tLen && qi < qLen) {
+            if (t[ti] === q[qi]) {
+                score += 1
+                consecutive += 1
+                if (consecutive > 1) score += consecutive
+                const prev = ti > 0 ? t[ti - 1] : " "
+                if (ti === 0 || /[\s\-_.&\/\\()+:]/.test(prev)) {
+                    score += 8 // word boundary bonus
+                }
+                lastIdx = ti
+                qi++
+            } else {
+                consecutive = 0
+                score -= 0.4
+            }
+            ti++
+            if (lastIdx !== -1 && ti - lastIdx > 12) {
+                return -1 // matches too sparse
+            }
+        }
+        if (qi !== qLen) return -1
+        score -= tLen * 0.01
+        if (t.startsWith(q)) score += 20
+        if (t === q) score += 100
+        return score
+    }
+
+    ListModel {
+        id: searchComposite
+    }
+
+    function recomputeSearchResults(): void {
+        searchComposite.clear()
+        const sf = modernMenu.searchField
+        const q = sf ? sf.text.trim() : ""
+        if (q.length === 0) {
+            return
+        }
+        const query = q.toLowerCase()
+        const apps = modernMenu.appsModel
+        const decorationRole = modernMenu.appsDecorationRole
+        const descriptionRole = modernMenu.appsDescriptionRole
+        const urlRole = modernMenu.appsUrlRole
+        const favoriteIdRole = modernMenu.appsFavoriteIdRole
+
+        // apps: score every app, keep best matches
+        let scored = []
+        if (apps && apps.rowCount !== undefined) {
+            for (let r = 0; r < apps.rowCount(); r++) {
+                const idx = apps.index(r, 0)
+                const display = String(apps.data(idx, modernMenu.appsDisplayRole) ?? "")
+                if (display.length === 0) continue
+                const sc = modernMenu.fuzzyScore(display, query)
+                if (sc > 0) {
+                    const decoration = apps.data(idx, decorationRole)
+                    const description = apps.data(idx, descriptionRole)
+                    const url = apps.data(idx, urlRole)
+                    const favoriteId = apps.data(idx, favoriteIdRole)
+                    scored.push({
+                        display: display,
+                        decoration: decoration === undefined ? "" : decoration,
+                        description: description === undefined ? "" : description,
+                        url: url === undefined ? "" : url,
+                        favoriteId: favoriteId === undefined ? "" : favoriteId,
+                        source: "fuzzy",
+                        appsRow: r,
+                        runnerRow: -1,
+                        score: sc
+                    })
+                }
+            }
+        }
+        scored.sort((a, b) => b.score - a.score)
+        // cap fuzzy results
+        if (scored.length > 40) scored = scored.slice(0, 40)
+        for (const item of scored) {
+            searchComposite.append(item)
+        }
+
+        // krunner rows: append everything except Application duplicates when fuzzy found matches
+        const rm = modernMenu.runnerModel.modelForRow(0)
+        if (rm && rm.rowCount !== undefined) {
+            for (let j = 0; j < rm.rowCount(); j++) {
+                const i2 = rm.index(j, 0)
+                const display = String(rm.data(i2, modernMenu.appsDisplayRole) ?? "")
+                const group = rm.data(i2, modernMenu.groupRole)
+                const decoration = rm.data(i2, decorationRole)
+                const description = rm.data(i2, descriptionRole)
+                const url = rm.data(i2, urlRole)
+                const favoriteId = rm.data(i2, favoriteIdRole)
+                if (scored.length > 0 && String(group) === "Applications") {
+                    continue // already covered by fuzzy list
+                }
+                const row = {
+                    display: display,
+                    decoration: decoration === undefined ? "" : decoration,
+                    description: description === undefined ? "" : description,
+                    url: url === undefined ? "" : url,
+                    favoriteId: favoriteId === undefined ? "" : favoriteId,
+                    source: "runner",
+                    appsRow: -1,
+                    runnerRow: j,
+                    score: 0
+                }
+                searchComposite.append(row)
+            }
+        }
+    }
+
+    function activateSearchEntry(modelData: var, row: int): bool {
+        if (!modelData) return false
+        if (modelData.source === "fuzzy") {
+            const apps = modernMenu.appsModel
+            if (apps && typeof apps.trigger === "function") {
+                return apps.trigger(modelData.appsRow, "", null)
+            }
+            return false
+        }
+        const rm = modernMenu.runnerModel.modelForRow(0)
+        if (rm && rm.trigger) {
+            return rm.trigger(modelData.runnerRow, "", null)
+        }
+        return false
+    }
+
+    function activateFirstSearchResult(): bool {
+        if (modernMenu.searchComposite.count > 0) {
+            const first = modernMenu.searchComposite.get(0)
+            return modernMenu.activateSearchEntry(first, 0)
+        }
+        return false
     }
 
     // ---------- Web search state (DuckDuckGo, no key required) ----------
@@ -765,7 +919,7 @@ PlasmoidItem {
                 onClicked: mouse => {
                     if (mouse.button === Qt.RightButton) {
                         modernMenu.openContextMenu(row, row.view.model, index, mouse.x, mouse.y)
-                    } else if (modernMenu.activateEntry(row.view.model, model, index)) {
+                    } else if (modernMenu.activateSearchEntry(model, index)) {
                         modernMenu.expanded = false
                     }
                 }
@@ -1007,7 +1161,7 @@ PlasmoidItem {
         id: searchListComponent
         ListView {
             id: searchList
-            model: modernMenu.runnerModel.count > 0 ? modernMenu.runnerModel.modelForRow(0) : null
+            model: modernMenu.searchComposite
             header: (modernMenu.mathResult !== null || modernMenu.webHasContent) ? searchAugmentComponent : null
             headerPositioning: ListView.OverlayHeader
             clip: true
@@ -1017,7 +1171,7 @@ PlasmoidItem {
             focus: true
             Keys.onEscapePressed: modernMenu.searchField ? modernMenu.searchField.clear() : modernMenu.expanded = false
             Keys.onReturnPressed: {
-                if (modernMenu.runnerModel.count > 0 && modernMenu.activate(searchList.model, searchList.currentIndex)) {
+                if (searchList.model && modernMenu.activateFirstSearchResult()) {
                     modernMenu.expanded = false
                 }
             }
@@ -1260,7 +1414,10 @@ PlasmoidItem {
                                 id: searchFieldImpl
                                 Layout.fillWidth: true
                                 focus: true
-                                onTextChanged: webSearchDebounce.restart()
+                                onTextChanged: {
+                                    modernMenu.recomputeSearchResults()
+                                    webSearchDebounce.restart()
+                                }
                                 placeholderText: i18nc("@info:placeholder", "Type to search apps, files, actions…")
                                 color: Kirigami.Theme.textColor
                                 placeholderTextColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.38)
@@ -1492,7 +1649,7 @@ PlasmoidItem {
                     PlasmaExtras.PlaceholderMessage {
                         anchors.centerIn: parent
                         width: parent.width - Kirigami.Units.largeSpacing * 2
-                        visible: modernMenu.searching && modernMenu.runnerModel.count === 0
+                        visible: modernMenu.searching && modernMenu.searchComposite.count === 0
                         iconName: "edit-none"
                         text: i18nc("@info:status", "No matches")
                         explanation: i18nc("@info:status", "Nothing matches “%1”.", searchField ? searchField.text : "")
