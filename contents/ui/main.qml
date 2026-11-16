@@ -20,7 +20,6 @@ import QtQuick.Layouts
 import QtQuick.Controls as QQC2
 
 import org.kde.kirigami as Kirigami
-import org.kde.kitemmodels as KItemModels
 import org.kde.plasma.components as PC3
 import org.kde.plasma.core as PlasmaCore
 import org.kde.plasma.extras as PlasmaExtras
@@ -103,6 +102,69 @@ PlasmoidItem {
         id: processRunner
     }
 
+    // ---------- Web search state (DuckDuckGo, no key required) ----------
+
+    property string webHeadline: ""
+    property string webAnswerText: ""
+    property string webAnswerSource: ""
+    property string webAnswerUrl: ""
+    property var webRelated: []
+
+    readonly property bool webHasContent: modernMenu.webHeadline.length > 0
+        || modernMenu.webAnswerText.length > 0
+        || modernMenu.webRelated.length > 0
+
+    Timer {
+        id: webSearchDebounce
+        interval: 320
+        repeat: false
+        onTriggered: modernMenu.fireWebSearch()
+    }
+
+    function clearWebResults(): void {
+        modernMenu.webHeadline = ""
+        modernMenu.webAnswerText = ""
+        modernMenu.webAnswerSource = ""
+        modernMenu.webAnswerUrl = ""
+        modernMenu.webRelated = []
+    }
+
+    function shellEscape(s: string): string {
+        return String(s).replace(/'/g, "'\\''")
+    }
+
+    function flatRelatedTopics(topics: var): var {
+        const out = []
+        if (!topics) return out
+        for (let i = 0; i < topics.length && out.length < 3; i++) {
+            const t = topics[i]
+            if (t && t.FirstURL && t.Text) {
+                out.push({ title: String(t.Text).split(" - ")[0].trim().slice(0, 44), url: String(t.FirstURL) })
+            } else if (t && t.Topics) {
+                const inner = t.Topics
+                for (let n = 0; n < inner.length && out.length < 3; n++) {
+                    if (inner[n] && inner[n].FirstURL) {
+                        out.push({ title: String(inner[n].Text || "").split(" - ")[0].trim().slice(0, 44), url: String(inner[n].FirstURL) })
+                    }
+                }
+            }
+        }
+        return out
+    }
+
+    function fireWebSearch(): void {
+        const q = modernMenu.searchField ? modernMenu.searchField.text.trim() : ""
+        if (!Plasmoid.configuration.webSearch || q.length < 3) {
+            modernMenu.clearWebResults()
+            return
+        }
+        const url = "https://api.duckduckgo.com/?q=" + encodeURIComponent(q)
+            + "&format=json&no_html=1&no_redirect=1"
+        // trailing marker lets us ignore responses for queries the user has already typed past
+        webSearchSource.connectSource(
+            "curl -s -m 5 --fail '" + url + "'; printf '\n@@MM@@'; printf '%s' '" + modernMenu.shellEscape(encodeURIComponent(q)) + "'")
+    }
+
     // ---------- State ----------
 
     readonly property bool showPowerButtons: Plasmoid.configuration.showPowerButtons
@@ -112,6 +174,24 @@ PlasmoidItem {
     readonly property bool searching: searchField !== null && searchField.text.length > 0
 
     property Item searchField: null
+
+    // Actions section items: deterministic, no D-Bus model to wait for
+    ListModel {
+        id: systemActionsModel
+        Component.onCompleted: {
+            const acts = modernMenu.powerActions
+            for (let i = 0; i < acts.length; i++) {
+                append({
+                    display: acts[i].name,
+                    decoration: acts[i].icon,
+                    description: acts[i].desc,
+                    url: "",
+                    favoriteId: "",
+                    cmd: acts[i].cmd,
+                })
+            }
+        }
+    }
 
     // 0 = All Applications, 1 = Favorites, 2 = Places, 3 = System actions
     property int currentSection: 0
@@ -125,21 +205,33 @@ PlasmoidItem {
         }
     }
 
-    readonly property int favoriteIdRole: KItemModels.KRoleNames.role("favoriteId")
-
     readonly property var powerActions: [
-        { icon: "system-lock-screen-symbolic", actionId: "lock-screen", name: i18nc("@action", "Lock") },
-        { icon: "system-suspend-symbolic", actionId: "suspend", name: i18nc("@action", "Suspend") },
-        { icon: "system-reboot-symbolic", actionId: "reboot", name: i18nc("@action", "Restart…") },
-        { icon: "system-shutdown-symbolic", actionId: "shutdown", name: i18nc("@action", "Shut Down…") },
+        { icon: "system-lock-screen-symbolic", cmd: "loginctl lock-session", name: i18nc("@action", "Lock"), desc: i18nc("@info", "Lock the screen"), cfg: "showLockScreen" },
+        { icon: "system-suspend-symbolic", cmd: "systemctl suspend", name: i18nc("@action", "Suspend"), desc: i18nc("@info", "Suspend the system"), cfg: "showSuspend" },
+        { icon: "system-reboot-symbolic", cmd: "systemctl reboot", name: i18nc("@action", "Restart…"), desc: i18nc("@info", "Restart the computer"), cfg: "showReboot" },
+        { icon: "system-shutdown-symbolic", cmd: "systemctl poweroff", name: i18nc("@action", "Shut Down…"), desc: i18nc("@info", "Power off the computer"), cfg: "showShutdown" },
     ]
+
+    readonly property bool anyPowerButtonsEnabled: powerActions.some(a => powerButtonEnabled(a.cfg))
+
+    // explicit per-button master switches; dynamic property lookup on
+    // Plasmoid.configuration is unreliable, so read them by name here
+    function powerButtonEnabled(cfg: string): bool {
+        switch (cfg) {
+        case "showLockScreen": return Plasmoid.configuration.showLockScreen === true
+        case "showSuspend": return Plasmoid.configuration.showSuspend === true
+        case "showReboot": return Plasmoid.configuration.showReboot === true
+        case "showShutdown": return Plasmoid.configuration.showShutdown === true
+        default: return true
+        }
+    }
 
     readonly property var sectionModel: {
         switch (modernMenu.currentSection) {
         case 0: return modernMenu.appsModel
         case 1: return modernMenu.rootModel.favoritesModel
         case 2: return modernMenu.computerModel
-        default: return modernMenu.systemModel
+        default: return systemActionsModel
         }
     }
 
@@ -148,11 +240,34 @@ PlasmoidItem {
         case 0: return modernMenu.appsModel ? modernMenu.appsModel.count : 0
         case 1: return modernMenu.rootModel.favoritesModel.count
         case 2: return modernMenu.computerModel.rowCount()
-        default: return modernMenu.systemModel ? modernMenu.systemModel.rowCount() : 0
+        default: return systemActionsModel.count
         }
     }
 
     // ---------- Helpers ----------
+
+    // Deliberately restricted to digits/operators/parens/dots, so evaluating
+    // the expression cannot run arbitrary code.
+    function evalMath(q: string): var {
+        if (!q) return null
+        let e = q.trim().replace(/\s+/g, "")
+            .replace(/×/g, "*").replace(/÷/g, "/").replace(/\^/g, "**").replace(/,/g, "")
+        if (e.length === 0 || e.length > 64) return null
+        if (!/^[-+*/().\d]+$/.test(e)) return null
+        try {
+            const v = Function('"use strict"; return (' + e + ')')()
+            if (typeof v === "number" && isFinite(v)) {
+                return Math.round(v * 1e10) / 1e10
+            }
+        } catch (err) {
+            return null
+        }
+        return null
+    }
+
+    readonly property var mathResult: (searchField !== null && searchField.text.length > 0)
+        ? evalMath(searchField.text)
+        : null
 
     function toggleFavorite(favoriteId: string): void {
         if (!favoriteId || favoriteId.length === 0) {
@@ -180,30 +295,17 @@ PlasmoidItem {
         return false
     }
 
-    function triggerSystemAction(actionId: string): void {
-        const m = modernMenu.systemModel
-        if (!m) return
-        for (let i = 0; i < m.rowCount(); i++) {
-            const idx = m.index(i, 0)
-            const id = String(m.data(idx, modernMenu.favoriteIdRole))
-            if (id === String(actionId)) {
-                m.trigger(i, "", null)
-                return
-            }
-        }
+    function runSessionCommand(cmd: string): void {
+        modernMenu.expanded = false
+        sessionSource.connectSource(cmd)
     }
 
-    function systemActionAvailable(actionId: string): bool {
-        const m = modernMenu.systemModel
-        if (!m) return false
-        for (let i = 0; i < m.rowCount(); i++) {
-            const idx = m.index(i, 0)
-            const id = String(m.data(idx, modernMenu.favoriteIdRole))
-            if (id === String(actionId)) {
-                return true
-            }
+    function activateEntry(viewModel: QObject, modelData: var, row: int): bool {
+        if (modelData && modelData.cmd !== undefined && String(modelData.cmd).length > 0) {
+            runSessionCommand(String(modelData.cmd))
+            return true
         }
-        return false
+        return modernMenu.activate(viewModel, row)
     }
 
     // Deterministic hue for an app, used for its icon tile.
@@ -238,6 +340,45 @@ PlasmoidItem {
             row: row,
         }
         appContextMenu.popup(item, x, y)
+    }
+
+    P5Support.DataSource {
+        id: webSearchSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: (sourceName, data) => {
+            disconnectSource(sourceName)
+            const out = String((data && data.stdout) || "")
+            const marker = out.indexOf("@@MM@@")
+            if (marker < 0) {
+                modernMenu.clearWebResults()
+                return
+            }
+            const jsonPart = out.substring(0, marker)
+            const tag = out.substring(marker + 6).trim()
+            const cur = modernMenu.searchField ? encodeURIComponent(modernMenu.searchField.text.trim()) : ""
+            if (tag !== cur) return // stale response for an older query
+            try {
+                const j = JSON.parse(jsonPart)
+                const answer = j.AbstractText || j.Abstract || j.Answer || j.Definition || ""
+                modernMenu.webHeadline = j.Heading || ""
+                modernMenu.webAnswerText = answer
+                modernMenu.webAnswerSource = j.AbstractSource || j.DefinitionSource || ""
+                modernMenu.webAnswerUrl = j.AbstractURL || j.DefinitionURL || ""
+                modernMenu.webRelated = modernMenu.flatRelatedTopics(j.RelatedTopics)
+            } catch (err) {
+                modernMenu.clearWebResults()
+            }
+        }
+    }
+
+    P5Support.DataSource {
+        id: sessionSource
+        engine: "executable"
+        connectedSources: []
+        onNewData: (sourceName, data) => {
+            disconnectSource(sourceName)
+        }
     }
 
     P5Support.DataSource {
@@ -363,6 +504,10 @@ PlasmoidItem {
             enabled: modernMenu.contextMenuTarget !== null
             onTriggered: {
                 const t = modernMenu.contextMenuTarget
+                if (t && t.item && t.item.model && t.item.model.cmd) {
+                    modernMenu.runSessionCommand(String(t.item.model.cmd))
+                    return
+                }
                 if (t && modernMenu.activate(t.viewModel, t.row)) {
                     modernMenu.expanded = false
                 }
@@ -620,7 +765,7 @@ PlasmoidItem {
                 onClicked: mouse => {
                     if (mouse.button === Qt.RightButton) {
                         modernMenu.openContextMenu(row, row.view.model, index, mouse.x, mouse.y)
-                    } else if (modernMenu.activate(row.view.model, index)) {
+                    } else if (modernMenu.activateEntry(row.view.model, model, index)) {
                         modernMenu.expanded = false
                     }
                 }
@@ -733,6 +878,7 @@ PlasmoidItem {
                         modernMenu.searchField.text = ""
                         modernMenu.searchField.forceActiveFocus()
                     }
+                    modernMenu.clearWebResults()
                 }
             }
         }
@@ -920,6 +1066,7 @@ PlasmoidItem {
                                 id: searchFieldImpl
                                 Layout.fillWidth: true
                                 focus: true
+                                onTextChanged: webSearchDebounce.restart()
                                 placeholderText: i18nc("@info:placeholder", "Type to search apps, files, actions…")
                                 color: Kirigami.Theme.textColor
                                 placeholderTextColor: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.38)
@@ -1072,28 +1219,6 @@ PlasmoidItem {
                     }
                 }
 
-                // ---- Section header + count ----
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.bottomMargin: -Kirigami.Units.smallSpacing / 2
-                    visible: !modernMenu.searching
-
-                    PC3.Label {
-                        text: modernMenu.currentSectionTitle
-                        font.pixelSize: Kirigami.Units.gridUnit * 0.62
-                        font.letterSpacing: 1.6
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.48)
-                    }
-                    Item {
-                        Layout.fillWidth: true
-                    }
-                    PC3.Label {
-                        text: i18ncp("@info item count", "%1 item", "%1 items", modernMenu.currentSectionCount)
-                        font.pixelSize: Kirigami.Units.gridUnit * 0.62
-                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.42)
-                    }
-                }
-
                 // ---- Content area ----
                 Item {
                     Layout.fillWidth: true
@@ -1124,6 +1249,227 @@ PlasmoidItem {
                             restoreMode: Binding.RestoreBinding
                         }
                     }
+
+                // ---- Search augment: math result + web answer panel ----
+                ColumnLayout {
+                    id: searchAugment
+
+                    visible: modernMenu.searching
+                        && (modernMenu.mathResult !== null || modernMenu.webHasContent)
+                    anchors {
+                        top: parent.top
+                        left: parent.left
+                        right: parent.right
+                        topMargin: Kirigami.Units.smallSpacing
+                        leftMargin: Kirigami.Units.smallSpacing
+                        rightMargin: Kirigami.Units.smallSpacing
+                    }
+                    spacing: Kirigami.Units.smallSpacing / 2
+                    z: 5
+
+                    // ── math result ──
+                    RowLayout {
+                        visible: modernMenu.mathResult !== null
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: Kirigami.Units.gridUnit * 1.8
+                        spacing: Kirigami.Units.smallSpacing
+
+                        PC3.Label {
+                            text: i18nc("@info:status", "HINT")
+                            font.pixelSize: Kirigami.Units.gridUnit * 0.6
+                            font.letterSpacing: 1.5
+                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.38)
+                        }
+
+                        Rectangle {
+                            id: mathChip
+
+                            Layout.preferredWidth: mathLabel.implicitWidth + Kirigami.Units.iconSizes.smallMedium + Kirigami.Units.largeSpacing * 1.6
+                            Layout.preferredHeight: Kirigami.Units.gridUnit * 1.6
+                            radius: height / 2
+                            color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.18)
+                            border.width: 1
+                            border.color: Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.45)
+
+                            Kirigami.Icon {
+                                id: mathIcon
+                                anchors.left: parent.left
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: Kirigami.Units.largeSpacing * 0.8
+                                source: "accessories-calculator-symbolic"
+                                width: Kirigami.Units.iconSizes.small
+                                height: Kirigami.Units.iconSizes.small
+                                color: Kirigami.Theme.highlightColor
+                            }
+                            PC3.Label {
+                                id: mathLabel
+                                anchors.left: mathIcon.right
+                                anchors.verticalCenter: parent.verticalCenter
+                                anchors.leftMargin: Kirigami.Units.smallSpacing
+                                text: "= " + String(modernMenu.mathResult)
+                                font.pixelSize: Kirigami.Units.gridUnit * 0.72
+                                font.bold: true
+                                font.family: "monospace"
+                                color: Kirigami.Theme.highlightColor
+                            }
+                        }
+                        Item {
+                            Layout.fillWidth: true
+                        }
+                    }
+
+                    // ── web answer panel (DuckDuckGo Instant Answer) ──
+                    Rectangle {
+                        id: webPanel
+
+                        visible: modernMenu.webHasContent
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: webColumn.implicitHeight + Kirigami.Units.largeSpacing * 1.4
+                        radius: Kirigami.Units.smallSpacing * 1.6
+                        color: Qt.rgba(Kirigami.Theme.backgroundColor.r, Kirigami.Theme.backgroundColor.g, Kirigami.Theme.backgroundColor.b, 0.95)
+                        border.width: 1
+                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.18)
+
+                        ColumnLayout {
+                            id: webColumn
+                            anchors.fill: parent
+                            anchors.margins: Kirigami.Units.largeSpacing * 0.7
+                            anchors.topMargin: Kirigami.Units.smallSpacing
+                            anchors.bottomMargin: Kirigami.Units.smallSpacing
+                            spacing: 1
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: modernMenu.webHeadline.length > 0
+                                spacing: Kirigami.Units.smallSpacing
+
+                                Kirigami.Icon {
+                                    source: "internet-web-browser-symbolic"
+                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                    color: Kirigami.Theme.highlightColor
+                                }
+                                PC3.Label {
+                                    Layout.fillWidth: true
+                                    text: modernMenu.webHeadline
+                                    font.bold: true
+                                    font.pixelSize: Kirigami.Units.gridUnit * 0.74
+                                    elide: Text.ElideRight
+                                    maximumLineCount: 1
+                                }
+                                PC3.Label {
+                                    text: i18nc("@info:status web search source tag", "WEB")
+                                    font.pixelSize: Kirigami.Units.gridUnit * 0.56
+                                    font.letterSpacing: 1.5
+                                    color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.4)
+                                }
+                            }
+
+                            PC3.Label {
+                                visible: modernMenu.webAnswerText.length > 0
+                                Layout.fillWidth: true
+                                text: modernMenu.webAnswerText
+                                wrapMode: Text.Wrap
+                                maximumLineCount: 3
+                                elide: Text.ElideRight
+                                font.pixelSize: Kirigami.Units.gridUnit * 0.66
+                                opacity: 0.88
+                            }
+
+                            RowLayout {
+                                Layout.fillWidth: true
+                                visible: modernMenu.webAnswerSource.length > 0 || modernMenu.webAnswerUrl.length > 0 || modernMenu.webRelated.length > 0
+                                spacing: Kirigami.Units.smallSpacing
+
+                                PC3.Label {
+                                    visible: modernMenu.webAnswerSource.length > 0
+                                    text: i18nc("@info:status", "via %1", modernMenu.webAnswerSource)
+                                    font.pixelSize: Kirigami.Units.gridUnit * 0.58
+                                    opacity: 0.55
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        enabled: modernMenu.webAnswerUrl.length > 0
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            modernMenu.expanded = false
+                                            sessionSource.connectSource("xdg-open '" + modernMenu.shellEscape(modernMenu.webAnswerUrl) + "'")
+                                        }
+                                    }
+                                }
+
+                                Repeater {
+                                    model: modernMenu.webRelated
+
+                                    delegate: Rectangle {
+                                        required property var modelData
+
+                                        Layout.preferredWidth: relatedLabel.implicitWidth + Kirigami.Units.largeSpacing * 2.2
+                                        Layout.preferredHeight: Kirigami.Units.gridUnit * 1.4
+                                        radius: height / 2
+                                        color: relatedHover.containsMouse
+                                            ? Qt.rgba(Kirigami.Theme.highlightColor.r, Kirigami.Theme.highlightColor.g, Kirigami.Theme.highlightColor.b, 0.22)
+                                            : Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.08)
+                                        border.width: 1
+                                        border.color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.12)
+
+                                        PC3.Label {
+                                            id: relatedLabel
+                                            anchors.centerIn: parent
+                                            text: modelData.title
+                                            font.pixelSize: Kirigami.Units.gridUnit * 0.62
+                                            color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.85)
+                                            elide: Text.ElideRight
+                                            maximumLineCount: 1
+                                        }
+
+                                        MouseArea {
+                                            id: relatedHover
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+
+                                            onClicked: {
+                                                const url = modelData.url
+                                                if (url) {
+                                                    modernMenu.expanded = false
+                                                    sessionSource.connectSource("xdg-open '" + modernMenu.shellEscape(url) + "'")
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Item {
+                                    Layout.fillWidth: true
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ---- Section header + count ----
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.bottomMargin: -Kirigami.Units.smallSpacing / 2
+                    visible: !modernMenu.searching
+
+                    PC3.Label {
+                        text: modernMenu.currentSectionTitle
+                        font.pixelSize: Kirigami.Units.gridUnit * 0.62
+                        font.letterSpacing: 1.6
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.48)
+                    }
+                    Item {
+                        Layout.fillWidth: true
+                    }
+                    PC3.Label {
+                        text: i18ncp("@info item count", "%1 item", "%1 items", modernMenu.currentSectionCount)
+                        font.pixelSize: Kirigami.Units.gridUnit * 0.62
+                        color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.42)
+                    }
+                }
+
 
                     PlasmaExtras.PlaceholderMessage {
                         anchors.centerIn: parent
@@ -1162,8 +1508,9 @@ PlasmoidItem {
                     id: bottomBar
 
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Kirigami.Units.gridUnit * 3.5
-                    visible: modernMenu.showUserProfile || modernMenu.showPowerButtons
+                    Layout.preferredHeight: Kirigami.Units.gridUnit * 2.4
+                    visible: modernMenu.showUserProfile
+                        || (modernMenu.showPowerButtons && modernMenu.anyPowerButtonsEnabled)
                     radius: Kirigami.Units.smallSpacing * 1.6
                     color: Qt.rgba(Kirigami.Theme.textColor.r, Kirigami.Theme.textColor.g, Kirigami.Theme.textColor.b, 0.05)
                     border.width: 1
@@ -1191,8 +1538,8 @@ PlasmoidItem {
                         Item {
                             id: avatar
 
-                            Layout.preferredWidth: Kirigami.Units.iconSizes.large
-                            Layout.preferredHeight: Kirigami.Units.iconSizes.large
+                            Layout.preferredWidth: Kirigami.Units.iconSizes.medium + 2
+                            Layout.preferredHeight: Kirigami.Units.iconSizes.medium + 2
                             visible: modernMenu.showUserProfile
 
                             readonly property string initial: userNameSource.userName.length > 0
@@ -1207,7 +1554,7 @@ PlasmoidItem {
                                 PC3.Label {
                                     anchors.centerIn: parent
                                     text: avatar.initial
-                                    font.pixelSize: Kirigami.Units.gridUnit * 0.85
+                                    font.pixelSize: Kirigami.Units.gridUnit * 0.72
                                     font.bold: true
                                     color: "#ffffff"
                                 }
@@ -1218,8 +1565,8 @@ PlasmoidItem {
                                 anchors.right: parent.right
                                 anchors.bottom: parent.bottom
                                 anchors.margins: 1
-                                width: Kirigami.Units.gridUnit * 0.55
-                                height: Kirigami.Units.gridUnit * 0.55
+                                width: Kirigami.Units.gridUnit * 0.5
+                                height: Kirigami.Units.gridUnit * 0.5
                                 radius: width / 2
                                 color: "#2ecc71"
                                 border.width: 2
@@ -1234,11 +1581,11 @@ PlasmoidItem {
                             PC3.Label {
                                 text: userNameSource.userName.length > 0 ? userNameSource.userName : "…"
                                 font.weight: Font.Medium
-                                font.pixelSize: Kirigami.Units.gridUnit * 0.78
+                                font.pixelSize: Kirigami.Units.gridUnit * 0.74
                             }
                             PC3.Label {
                                 text: i18nc("@info session type", "Desktop Session")
-                                font.pixelSize: Kirigami.Units.gridUnit * 0.62
+                                font.pixelSize: Kirigami.Units.gridUnit * 0.56
                                 opacity: 0.5
                             }
                         }
@@ -1249,14 +1596,6 @@ PlasmoidItem {
                         }
                         Item {
                             Layout.fillWidth: true
-                        }
-
-                        // SystemModel is created here (inside the footer), not at
-                        // applet root: it refreshes asynchronously via logind D-Bus
-                        // and segfaults if built too early.
-                        Kicker.SystemModel {
-                            id: systemModel
-                            favoritesModel: modernMenu.rootModel.systemFavoritesModel
                         }
 
                         Repeater {
@@ -1272,8 +1611,8 @@ PlasmoidItem {
                                 icon.width: Kirigami.Units.iconSizes.smallMedium
                                 icon.height: Kirigami.Units.iconSizes.smallMedium
                                 opacity: 0.75
-                                visible: modernMenu.systemActionAvailable(modelData.actionId)
-                                onClicked: modernMenu.triggerSystemAction(modelData.actionId)
+                                visible: modernMenu.powerButtonEnabled(modelData.cfg)
+                                onClicked: modernMenu.runSessionCommand(modelData.cmd)
 
                                 PC3.ToolTip.text: modelData.name
                                 PC3.ToolTip.visible: hovered

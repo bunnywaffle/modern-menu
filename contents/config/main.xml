@@ -26,7 +26,23 @@
             <default>true</default>
         </entry>
         <entry name="showPowerButtons" type="Bool">
-            <label>Show the power buttons (lock, log out, suspend, restart, shut down).</label>
+            <label>Show the power buttons in the bottom bar (master switch).</label>
+            <default>true</default>
+        </entry>
+        <entry name="showLockScreen" type="Bool">
+            <label>Show the Lock screen button.</label>
+            <default>true</default>
+        </entry>
+        <entry name="showSuspend" type="Bool">
+            <label>Show the Suspend button.</label>
+            <default>true</default>
+        </entry>
+        <entry name="showReboot" type="Bool">
+            <label>Show the Restart button.</label>
+            <default>true</default>
+        </entry>
+        <entry name="showShutdown" type="Bool">
+            <label>Show the Shut down button.</label>
             <default>true</default>
         </entry>
         <entry name="sidebarCollapsed" type="Bool">
@@ -36,6 +52,10 @@
         <entry name="showUserProfile" type="Bool">
             <label>Show the user profile (avatar and user name) in the bottom bar.</label>
             <default>true</default>
+        </entry>
+        <entry name="webSearch" type="Bool">
+            <label>Show a Google search entry in the search results (opens in your browser).</label>
+            <default>false</default>
         </entry>
         <entry name="gridColumns" type="Int">
             <label>Number of columns in grid view.</label>

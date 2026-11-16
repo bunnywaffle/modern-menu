@@ -23,6 +23,7 @@ KCM.SimpleKCM {
     property alias cfg_showPowerButtons: powerCheck.checked
     property alias cfg_sidebarCollapsed: sidebarCheck.checked
     property alias cfg_showUserProfile: profileCheck.checked
+    property alias cfg_webSearch: webSearchCheck.checked
     property alias cfg_gridColumns: columnsSpin.value
     property alias cfg_gridCellHeight: cellHeightSpin.value
 
@@ -67,7 +68,28 @@ KCM.SimpleKCM {
 
         QQC2.CheckBox {
             id: powerCheck
-            text: i18nc("@option:check", "Show power buttons (lock, log out, suspend, restart, shut down)")
+            Kirigami.FormData.label: i18nc("@label:checkbox", "Power buttons:")
+            text: i18nc("@option:check", "Enable power buttons")
+        }
+        QQC2.CheckBox {
+            id: lockCheck
+            text: i18nc("@option:check", "Lock screen")
+            enabled: powerCheck.checked
+        }
+        QQC2.CheckBox {
+            id: suspendCheck
+            text: i18nc("@option:check", "Suspend")
+            enabled: powerCheck.checked
+        }
+        QQC2.CheckBox {
+            id: rebootCheck
+            text: i18nc("@option:check", "Restart…")
+            enabled: powerCheck.checked
+        }
+        QQC2.CheckBox {
+            id: shutdownCheck
+            text: i18nc("@option:check", "Shut down…")
+            enabled: powerCheck.checked
         }
 
         QQC2.CheckBox {
@@ -78,6 +100,11 @@ KCM.SimpleKCM {
         QQC2.CheckBox {
             id: profileCheck
             text: i18nc("@option:check", "Show user profile (avatar and user name) in the bottom bar")
+        }
+
+        QQC2.CheckBox {
+            id: webSearchCheck
+            text: i18nc("@option:check", "Show web results (DuckDuckGo) when searching")
         }
 
         QQC2.SpinBox {
